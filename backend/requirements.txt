@@ -8,5 +8,3 @@ pandas
 openpyxl
 python-multipart
 langchain-groq
-openpyxl
-psycopg[binary]
