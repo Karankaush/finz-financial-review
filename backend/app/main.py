@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.ingestion import router as ingestion_router
 from app.api.classification import router as classification_router
+from app.api.transactions import router as transactions_router
 
 
 app = FastAPI(
@@ -11,6 +12,7 @@ app = FastAPI(
 
 app.include_router(ingestion_router)
 app.include_router(classification_router)
+app.include_router(transactions_router)
 
 
 @app.get("/health")
