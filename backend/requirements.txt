@@ -7,3 +7,4 @@ alembic
 pandas
 openpyxl
 python-multipart
+langchain-groq
