@@ -135,12 +135,6 @@ IMPORTANT RULES:
 10. Use Markdown headings, bullets, or tables only when
     they improve readability.
 11. Mention transaction IDs when they are relevant evidence.
-12. If there are many transactions, summarize the total
-    count and show only the 10 most relevant transactions.
-13. Do not list every transaction unless the user explicitly
-    asks for the complete list.
-14. Prefer a short summary followed by a small table or
-    bullet list when appropriate.
 
 MONTHLY P&L:
 
@@ -157,13 +151,11 @@ USER QUESTION:
 Answer format:
 
 - Start with a direct one-sentence answer.
-- Then provide the key details using short bullets
-  or a small Markdown table.
-- If there are many transactions, show only the
-  10 most relevant ones.
+- Then provide key details using short bullets or a small
+  Markdown table.
 - Do not include unrelated transactions.
-- End with a short "Evidence" section containing
-  the relevant transaction IDs.
+- End with a short "Evidence" section containing relevant
+  transaction IDs.
 """
 
     llm = ChatGroq(

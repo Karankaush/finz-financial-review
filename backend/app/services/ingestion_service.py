@@ -47,7 +47,16 @@ def ingest_transactions(
 
         transactions.append(transaction)
 
-    db.add_all(transactions)
-    db.commit()
+    try:
+        db.query(Transaction).delete(
+            synchronize_session=False
+        )
 
-    return len(transactions)
+        db.add_all(transactions)
+        db.commit()
+
+        return len(transactions)
+
+    except Exception:
+        db.rollback()
+        raise

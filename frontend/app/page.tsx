@@ -9,12 +9,16 @@ import {
   runClassification,
   getPnL,
   askAnalyst,
+  getReviewTransactions,
+  correctTransaction,
 } from "@/lib/api";
 
 
 export default function Home() {
   const [file, setFile] =
     useState<File | null>(null);
+
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const [message, setMessage] =
     useState("");
@@ -28,22 +32,31 @@ export default function Home() {
   const [answer, setAnswer] =
     useState("");
 
+  const [reviewTransactions, setReviewTransactions] =
+    useState<any[]>([]);
+
+  const [reviewLoading, setReviewLoading] =
+    useState(false);
+
 
   async function handleUpload() {
-    if (!file) return;
+  if (!file) {
+    setMessage("Please select a file first");
+    return;
+  }
 
-    try {
-      const result =
-        await uploadTransactions(file);
+  try {
+    const result = await uploadTransactions(file);
 
-      setMessage(
-        `${result.total_transactions} transactions uploaded`
-      );
-    } catch (error) {
-      setMessage(
-        "Upload failed"
-      );
-    }
+    setDataLoaded(true);
+
+    setMessage(
+      `${result.total_transactions} transactions uploaded successfully`
+    );
+  } catch (error) {
+    console.error(error);
+    setMessage("Upload failed");
+  }
   }
 
 
@@ -76,6 +89,53 @@ export default function Home() {
     }
   }
 
+
+  async function handleLoadReview() {
+  try {
+    setReviewLoading(true);
+
+    const result =
+      await getReviewTransactions();
+
+    setReviewTransactions(result);
+  } catch {
+    setMessage(
+      "Failed to load review transactions"
+    );
+  } finally {
+    setReviewLoading(false);
+  }
+  }
+
+  async function handleCorrection(
+  id: number,
+  category: string,
+  accountingTreatment: string
+) {
+  try {
+    await correctTransaction(
+      id,
+      category,
+      accountingTreatment
+    );
+
+    setReviewTransactions(
+      (current) =>
+        current.filter(
+          (transaction) =>
+            transaction.id !== id
+        )
+    );
+
+    setMessage(
+      "Transaction corrected successfully"
+    );
+  } catch {
+    setMessage(
+      "Failed to correct transaction"
+    );
+  }
+  }
 
   async function handleAsk() {
     if (!question.trim()) return;
@@ -112,29 +172,64 @@ export default function Home() {
 
         {/* Upload */}
 
+
+
         <section className="mb-8 rounded-xl bg-slate-900 p-6">
 
-          <h2 className="mb-4 text-xl font-semibold">
+          <h2 className="mb-2 text-xl font-semibold">
             1. Ingest Transactions
           </h2>
 
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={(event) =>
-              setFile(
-                event.target.files?.[0] || null
-              )
-            }
-            className="mb-4 block"
-          />
+          <p className="mb-5 text-sm text-slate-400">
+            Upload your bank transaction file to begin the financial review.
+          </p>
 
-          <button
-            onClick={handleUpload}
-            className="rounded-lg bg-blue-600 px-4 py-2 hover:bg-blue-500"
-          >
-            Upload
-          </button>
+          <div className="flex flex-wrap items-center gap-4">
+
+            <label className="cursor-pointer rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700">
+              Choose File
+
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(event) => {
+                  const selectedFile =
+                    event.target.files?.[0] ?? null;
+
+                  setFile(selectedFile);
+                  setMessage("");
+                }}
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={!file}
+              className="cursor-pointer rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Upload
+            </button>
+
+          </div>
+
+          {file && (
+            <div className="mt-4 rounded-lg bg-slate-800 px-4 py-3 text-sm">
+              <span className="text-slate-400">
+                Selected file:
+              </span>{" "}
+              <span className="font-medium text-white">
+                {file.name}
+              </span>
+            </div>
+          )}
+
+          {dataLoaded && (
+            <div className="mt-4 rounded-lg border border-emerald-700 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">
+              ✓ Dataset loaded successfully
+            </div>
+          )}
 
         </section>
 
@@ -153,6 +248,119 @@ export default function Home() {
           >
             Run Classification
           </button>
+
+        </section>
+
+        {/* Review Transactions */}
+
+        <section className="mb-8 rounded-xl bg-slate-900 p-6">
+
+          <div className="mb-5 flex items-center justify-between">
+
+            <div>
+              <h2 className="text-xl font-semibold">
+                3. Transactions Needing Review
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Review and correct uncertain transaction
+                classifications.
+              </p>
+            </div>
+
+            <button
+              onClick={handleLoadReview}
+              className="rounded-lg bg-amber-600 px-4 py-2 hover:bg-amber-500"
+            >
+              Load Review Queue
+            </button>
+
+          </div>
+
+
+          {reviewLoading && (
+            <p className="text-slate-400">
+              Loading review transactions...
+            </p>
+          )}
+
+
+          {!reviewLoading &&
+            reviewTransactions.length === 0 && (
+              <div className="rounded-lg border border-slate-700 p-5 text-center">
+                <p className="text-emerald-400">
+                  No transactions require review.
+                </p>
+              </div>
+            )}
+
+
+          {reviewTransactions.length > 0 && (
+
+            <div className="overflow-x-auto">
+
+              <table className="w-full text-left text-sm">
+
+                <thead>
+                  <tr className="border-b border-slate-700">
+
+                    <th className="px-3 py-3">
+                      Transaction
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Date
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Description
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Amount
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Confidence
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Category
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Accounting
+                    </th>
+
+                    <th className="px-3 py-3">
+                      Action
+                    </th>
+
+                  </tr>
+                </thead>
+
+
+                <tbody className="divide-y divide-slate-800">
+
+                  {reviewTransactions.map(
+                    (transaction) => (
+
+                      <ReviewRow
+                        key={transaction.id}
+                        transaction={transaction}
+                        onCorrect={handleCorrection}
+                      />
+
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+
+          )}
 
         </section>
 
@@ -408,5 +616,186 @@ export default function Home() {
       </div>
 
     </main>
+  );
+}
+
+
+function ReviewRow({
+  transaction,
+  onCorrect,
+}: {
+  transaction: any;
+  onCorrect: (
+    id: number,
+    category: string,
+    accountingTreatment: string
+  ) => void;
+}) {
+  const [category, setCategory] =
+    useState("");
+
+  const [accountingTreatment, setAccountingTreatment] =
+    useState("P&L");
+
+
+  return (
+    <tr>
+
+      <td className="px-3 py-4 font-medium text-white">
+        {transaction.transaction_id}
+      </td>
+
+
+      <td className="px-3 py-4 text-slate-300">
+        {transaction.date}
+      </td>
+
+
+      <td className="max-w-xs px-3 py-4 text-slate-300">
+        {transaction.description}
+      </td>
+
+
+      <td className="px-3 py-4 whitespace-nowrap">
+        ${transaction.amount}
+      </td>
+
+
+      <td className="px-3 py-4">
+        <span className="rounded bg-red-900/40 px-2 py-1 text-red-300">
+          {Number(
+            transaction.confidence
+          ).toFixed(2)}
+        </span>
+      </td>
+
+
+      <td className="px-3 py-4">
+
+        <select
+          value={category}
+          onChange={(event) =>
+            setCategory(event.target.value)
+          }
+          className="rounded-lg bg-slate-800 px-3 py-2 text-white outline-none"
+        >
+
+          <option value="">
+            Select category
+          </option>
+
+          <option value="Revenue">
+            Revenue
+          </option>
+
+          <option value="Food">
+            Food
+          </option>
+
+          <option value="Beverage">
+            Beverage
+          </option>
+
+          <option value="Payroll">
+            Payroll
+          </option>
+
+          <option value="Rent">
+            Rent
+          </option>
+
+          <option value="Utilities">
+            Utilities
+          </option>
+
+          <option value="Marketing">
+            Marketing
+          </option>
+
+          <option value="Insurance">
+            Insurance
+          </option>
+
+          <option value="Cleaning">
+            Cleaning
+          </option>
+
+          <option value="Delivery Commission">
+            Delivery Commission
+          </option>
+
+          <option value="Refunds & Discounts">
+            Refunds & Discounts
+          </option>
+
+          <option value="Equipment">
+            Equipment
+          </option>
+
+          <option value="Loan Repayment">
+            Loan Repayment
+          </option>
+
+          <option value="Owner Distribution">
+            Owner Distribution
+          </option>
+
+          <option value="Sales Tax">
+            Sales Tax
+          </option>
+
+        </select>
+
+      </td>
+
+
+      <td className="px-3 py-4">
+
+        <select
+          value={accountingTreatment}
+          onChange={(event) =>
+            setAccountingTreatment(
+              event.target.value
+            )
+          }
+          className="rounded-lg bg-slate-800 px-3 py-2 text-white outline-none"
+        >
+
+          <option value="P&L">
+            P&L
+          </option>
+
+          <option value="Balance Sheet">
+            Balance Sheet
+          </option>
+
+          <option value="Equity">
+            Equity
+          </option>
+
+        </select>
+
+      </td>
+
+
+      <td className="px-3 py-4">
+
+        <button
+          disabled={!category}
+          onClick={() =>
+            onCorrect(
+              transaction.id,
+              category,
+              accountingTreatment
+            )
+          }
+          className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Correct
+        </button>
+
+      </td>
+
+    </tr>
   );
 }
