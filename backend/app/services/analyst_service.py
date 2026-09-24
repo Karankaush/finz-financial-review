@@ -30,14 +30,40 @@ Operating Profit: {month['operating_profit']}
 def _build_transaction_context(
     db: Session,
     limit: int = 100,
+    review_only: bool = False,
 ) -> list[Transaction]:
 
+    query = db.query(Transaction)
+
+    if review_only:
+        query = query.filter(
+            Transaction.needs_review.is_(True)
+        )
+
     return (
-        db.query(Transaction)
+        query
         .order_by(Transaction.date.desc())
         .limit(limit)
         .all()
     )
+
+
+def _is_review_question(question: str) -> bool:
+    keywords = [
+        "review",
+        "attention",
+        "uncertain",
+        "unclassified",
+        "needs attention",
+    ]
+
+    question_lower = question.lower()
+
+    return any(
+        keyword in question_lower
+        for keyword in keywords
+    )
+
 
 
 def _serialize_transactions(
@@ -69,7 +95,10 @@ def answer_question(
 
     pnl_data = calculate_monthly_pnl(db)
 
-    transactions = _build_transaction_context(db)
+    transactions = _build_transaction_context(
+    db,
+    review_only=_is_review_question(question),
+)
 
     pnl_context = _serialize_pnl(pnl_data)
 
@@ -80,22 +109,32 @@ def answer_question(
     prompt = f"""
 You are an AI financial analyst for a restaurant business.
 
-Answer the user's question using ONLY the financial
-data provided below.
+The backend has already performed the financial calculations
+and transaction filtering.
+
+Your job is to explain the provided data clearly.
+You are NOT responsible for deciding which transactions
+belong in the provided dataset.
 
 IMPORTANT RULES:
 
 1. Never invent financial numbers.
-2. Never calculate numbers that are not supported by the
-   provided data.
-3. Treat the P&L figures below as authoritative.
-4. If the data does not contain enough information,
-   clearly say so.
-5. Explain the reasoning in simple business language.
-6. Mention the relevant transaction IDs when discussing
-   transaction-level evidence.
-7. Do not claim that a transaction caused something unless
-   the provided data supports that connection.
+2. Never invent transaction IDs.
+3. Never include transactions that are not relevant to
+   the user's question.
+4. If the transaction context contains transactions marked
+   as needing review, treat that as the authoritative list
+   of transactions requiring review.
+5. Do not add transactions merely because they seem
+   financially interesting.
+6. Do not include transactions that are explicitly marked
+   as not requiring review when answering a review question.
+7. Do not perform unsupported accounting reclassification.
+8. If the provided data is insufficient, say so.
+9. Keep the answer concise and easy to scan.
+10. Use Markdown headings, bullets, or tables only when
+    they improve readability.
+11. Mention transaction IDs when they are relevant evidence.
 
 MONTHLY P&L:
 
@@ -109,10 +148,14 @@ USER QUESTION:
 
 {question}
 
-Provide:
-1. A concise answer.
-2. The relevant transaction IDs or financial periods
-   used as evidence.
+Answer format:
+
+- Start with a direct one-sentence answer.
+- Then provide key details using short bullets or a small
+  Markdown table.
+- Do not include unrelated transactions.
+- End with a short "Evidence" section containing relevant
+  transaction IDs.
 """
 
     llm = ChatGroq(
@@ -123,12 +166,10 @@ Provide:
 
     response = llm.invoke(prompt)
 
-    evidence = []
-
-    for transaction in transactions:
-        if transaction.transaction_id in response.content:
-            evidence.append(transaction.transaction_id)
-
+    evidence = [
+    transaction.transaction_id
+    for transaction in transactions
+    ]
     return {
         "answer": response.content,
         "evidence": evidence,
