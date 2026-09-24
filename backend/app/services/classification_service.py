@@ -1,231 +1,262 @@
-from decimal import Decimal
-
 from sqlalchemy.orm import Session
 
 from app.models.transaction import Transaction
 
 
-def classify_transaction(transaction: Transaction) -> dict:
+def classify_transaction(transaction: Transaction):
     text = (
         f"{transaction.description} "
         f"{transaction.counterparty}"
     ).lower()
 
-    # Revenue
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # REVENUE
+    # -------------------------
+    if any(x in text for x in [
         "pos food",
-        "pos beverage",
-        "catering payment",
-        "marketplace payout",
+        "food sales",
     ]):
-        return {
-            "category": "Revenue",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.99"),
-            "needs_review": False,
-        }
+        return "Revenue", 0.98, False, "P&L"
 
-    # Payroll
-    if any(keyword in text for keyword in [
+    if any(x in text for x in [
+        "pos beverage",
+        "beverage sales",
+    ]):
+        return "Revenue", 0.98, False, "P&L"
+
+    if any(x in text for x in [
+        "catering payment",
+        "catering invoice payment",
+    ]):
+        return "Revenue", 0.95, False, "P&L"
+
+    if "marketplace payout" in text:
+        return "Revenue", 0.95, False, "P&L"
+
+    # Gift cards are normally a liability until redeemed
+    if "gift card" in text:
+        return "Gift Card Liability", 0.95, False, "Balance Sheet"
+
+    # -------------------------
+    # PAYROLL
+    # -------------------------
+    if any(x in text for x in [
         "payroll",
         "salary",
         "wages",
     ]):
-        return {
-            "category": "Payroll",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.99"),
-            "needs_review": False,
-        }
+        return "Payroll", 0.98, False, "P&L"
 
-    # Rent
+    # -------------------------
+    # RENT
+    # -------------------------
     if "rent" in text:
-        return {
-            "category": "Rent",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.99"),
-            "needs_review": False,
-        }
+        return "Rent", 0.98, False, "P&L"
 
-    # Utilities
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # UTILITIES
+    # -------------------------
+    if any(x in text for x in [
         "electricity",
         "utility",
         "water",
-        "gas",
+        "gas bill",
+        "internet",
+        "phone",
     ]):
-        return {
-            "category": "Utilities",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.98"),
-            "needs_review": False,
-        }
+        return "Utilities", 0.95, False, "P&L"
 
-    # Food inventory
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # FOOD / BEVERAGE
+    # -------------------------
+    if any(x in text for x in [
+        "food inventory",
         "food",
         "produce",
         "meat",
         "grocery",
-        "food inventory",
     ]):
-        return {
-            "category": "Food",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.90"),
-            "needs_review": False,
-        }
+        return "Food", 0.95, False, "P&L"
 
-    # Beverage inventory
-    if any(keyword in text for keyword in [
+    if any(x in text for x in [
+        "beverage inventory",
         "beverage",
         "beer",
         "wine",
         "liquor",
         "drinks",
     ]):
-        return {
-            "category": "Beverage",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.90"),
-            "needs_review": False,
-        }
+        return "Beverage", 0.95, False, "P&L"
 
-    # Marketing
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # MARKETING
+    # -------------------------
+    if any(x in text for x in [
         "marketing",
         "advertising",
+        "advertisement",
         "ads",
     ]):
-        return {
-            "category": "Marketing",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.97"),
-            "needs_review": False,
-        }
+        return "Marketing", 0.95, False, "P&L"
 
-    # Insurance
+    # -------------------------
+    # INSURANCE
+    # -------------------------
     if "insurance" in text:
-        return {
-            "category": "Insurance",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.98"),
-            "needs_review": False,
-        }
+        return "Insurance", 0.98, False, "P&L"
 
-    # Cleaning
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # CLEANING
+    # -------------------------
+    if any(x in text for x in [
         "cleaning",
         "janitorial",
     ]):
-        return {
-            "category": "Cleaning",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.97"),
-            "needs_review": False,
-        }
+        return "Cleaning", 0.95, False, "P&L"
 
-    # Equipment / capital expenditure
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # DELIVERY COMMISSION
+    # -------------------------
+    if any(x in text for x in [
+        "delivery commission",
+        "platform commission",
+        "commission",
+    ]):
+        return "Delivery Commission", 0.95, False, "P&L"
+
+    # -------------------------
+    # REFUNDS / DISCOUNTS
+    # -------------------------
+    if any(x in text for x in [
+        "refund",
+        "discount",
+    ]):
+        return "Refunds & Discounts", 0.95, False, "P&L"
+
+    # -------------------------
+    # OFFICE / ADMIN
+    # -------------------------
+    # These are plausible classifications,
+    # but still need human review.
+    if any(x in text for x in [
+        "office supplies",
+        "office/admin",
+        "admin supplies",
+        "stationery",
+    ]):
+        return "Office/Admin Supplies", 0.75, True, "P&L"
+
+    # -------------------------
+    # REPAIRS
+    # -------------------------
+    if any(x in text for x in [
+        "repair",
+        "maintenance",
+    ]):
+        return "Repairs & Maintenance", 0.75, True, "P&L"
+
+    # -------------------------
+    # SOFTWARE / LICENSE
+    # -------------------------
+    if any(x in text for x in [
+        "pos/software",
+        "software subscription",
+        "pos subscription",
+        "software",
+    ]):
+        return "POS/Software Subscription", 0.75, True, "P&L"
+
+    if any(x in text for x in [
+        "annual license",
+        "license renewal",
+    ]):
+        return "POS/Software Subscription", 0.70, True, "P&L"
+
+    # -------------------------
+    # ACCOUNTING
+    # -------------------------
+    if any(x in text for x in [
+        "accounting",
+        "bookkeeping",
+    ]):
+        return "Accounting/Bookkeeping", 0.80, True, "P&L"
+
+    # -------------------------
+    # PACKAGING
+    # -------------------------
+    if any(x in text for x in [
+        "packaging",
+        "disposables",
+        "to-go",
+    ]):
+        return "To-go Packaging & Disposables", 0.75, True, "P&L"
+
+    # -------------------------
+    # EQUIPMENT
+    # -------------------------
+    if any(x in text for x in [
         "equipment",
         "oven",
         "refrigerator",
         "freezer",
         "machine",
     ]):
-        return {
-            "category": "Equipment",
-            "accounting_treatment": "Balance Sheet",
-            "confidence": Decimal("0.95"),
-            "needs_review": False,
-        }
+        return "Equipment", 0.98, False, "Balance Sheet"
 
-    # Loan principal
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # LOAN PRINCIPAL
+    # -------------------------
+    if any(x in text for x in [
         "loan principal",
         "loan repayment",
         "principal repayment",
     ]):
-        return {
-            "category": "Loan Repayment",
-            "accounting_treatment": "Balance Sheet",
-            "confidence": Decimal("0.98"),
-            "needs_review": False,
-        }
+        return "Loan Repayment", 0.98, False, "Balance Sheet"
 
-    # Owner distribution
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # OWNER DISTRIBUTION
+    # -------------------------
+    if any(x in text for x in [
         "owner distribution",
         "owner withdrawal",
         "owner draw",
     ]):
-        return {
-            "category": "Owner Distribution",
-            "accounting_treatment": "Equity",
-            "confidence": Decimal("0.98"),
-            "needs_review": False,
-        }
+        return "Owner Distribution", 0.98, False, "Equity"
 
-    # Sales tax
-    if any(keyword in text for keyword in [
+    # -------------------------
+    # SALES TAX
+    # -------------------------
+    if any(x in text for x in [
         "sales tax",
         "tax remittance",
     ]):
-        return {
-            "category": "Sales Tax",
-            "accounting_treatment": "Balance Sheet",
-            "confidence": Decimal("0.98"),
-            "needs_review": False,
-        }
+        return "Sales Tax", 0.98, False, "Balance Sheet"
 
-    # Refund / discount
-    if any(keyword in text for keyword in [
-        "refund",
-        "discount",
-    ]):
-        return {
-            "category": "Refunds & Discounts",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.95"),
-            "needs_review": False,
-        }
-
-    # Delivery commission
-    if any(keyword in text for keyword in [
-        "delivery commission",
-        "platform commission",
-        "commission",
-    ]):
-        return {
-            "category": "Delivery Commission",
-            "accounting_treatment": "P&L",
-            "confidence": Decimal("0.95"),
-            "needs_review": False,
-        }
-
-    # Unknown transaction
-    return {
-        "category": "Uncategorized",
-        "accounting_treatment": "Review Required",
-        "confidence": Decimal("0.40"),
-        "needs_review": True,
-    }
+    # -------------------------
+    # UNKNOWN / REVIEW
+    # -------------------------
+    return "Uncategorized", 0.40, True, None
 
 
-def classify_transactions(db: Session) -> tuple[int, int]:
+def classify_transactions(db: Session):
     transactions = db.query(Transaction).all()
 
     review_count = 0
 
     for transaction in transactions:
-        result = classify_transaction(transaction)
+        (
+            category,
+            confidence,
+            needs_review,
+            accounting_treatment,
+        ) = classify_transaction(transaction)
 
-        transaction.category = result["category"]
-        transaction.accounting_treatment = result["accounting_treatment"]
-        transaction.confidence = result["confidence"]
-        transaction.needs_review = result["needs_review"]
+        transaction.category = category
+        transaction.confidence = confidence
+        transaction.needs_review = needs_review
+        transaction.accounting_treatment = accounting_treatment
 
-        if result["needs_review"]:
+        if needs_review:
             review_count += 1
 
     db.commit()
